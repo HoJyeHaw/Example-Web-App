@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Fitness Coach</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: white;
+        }
+        
+        #container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        #scene-container {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1e 100%);
+        }
+        
+        #controls {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        h1 {
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .exercise-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .exercise-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 15px;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .exercise-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.4);
+        }
+        
+        .exercise-btn.active {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        #status {
+            text-align: center;
+            font-size: 18px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ade80;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        
+        .emoji {
+            font-size: 20px;
+            margin-right: 5px;
+        }
+        
+        #info-banner {
+            background: rgba(74, 222, 128, 0.2);
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+            border-bottom: 2px solid #4ade80;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-banner">
+            💪 AR Fitness Coach - Select an exercise to start training!
+        </div>
+        <div id="scene-container"></div>
+        <div id="controls">
+            <h1>🏋️ Choose Your Exercise</h1>
+            <div class="exercise-grid">
+                <button class="exercise-btn" data-exercise="squat">
+                    <span class="emoji">🦵</span> Squat
+                </button>
+                <button class="exercise-btn" data-exercise="jumpingjack">
+                    <span class="emoji">⭐</span> Jumping Jack
+                </button>
+                <button class="exercise-btn" data-exercise="stretch">
+                    <span class="emoji">🤸</span> Stretch
+                </button>
+            </div>
+            <div id="status">Select an exercise to begin</div>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="reps">0</div>
+                    <div class="stat-label">Reps</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="time">0</div>
+                    <div class="stat-label">Seconds</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="calories">0</div>
+                    <div class="stat-label">Calories</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, trainer, floor;
+        let currentExercise = null;
+        let animationId = null;
+        let reps = 0;
+        let startTime = null;
+        let calories = 0;
+        
+        const exercises = {
+            squat: {
+                name: 'Squat',
+                duration: 2000,
+                color: 0x4ade80,
+                message: '🔥 Great form! Keep those knees aligned!',
+                caloriesPerRep: 0.5
+            },
+            jumpingjack: {
+                name: 'Jumping Jack',
+                duration: 1500,
+                color: 0xfbbf24,
+                message: '⚡ Keep jumping! Feel that energy!',
+                caloriesPerRep: 0.8
+            },
+            stretch: {
+                name: 'Stretch',
+                duration: 3000,
+                color: 0x60a5fa,
+                message: '🧘 Nice and easy, breathe deeply!',
+                caloriesPerRep: 0.3
+            }
+        };
+
+        function init() {
+            const container = document.getElementById('scene-container');
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2e);
+            scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
+            camera.lookAt(0, 1, 0);
+            
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const spotLight = new THREE.SpotLight(0xffffff, 1);
+            spotLight.position.set(0, 10, 0);
+            spotLight.castShadow = true;
+            scene.add(spotLight);
+            
+            const frontLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            frontLight.position.set(0, 5, 10);
+            scene.add(frontLight);
+            
+            // Floor (ground plane)
+            const floorGeometry = new THREE.CircleGeometry(5, 32);
+            const floorMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2d3748,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(10, 10, 0x4a5568, 0x2d3748);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            // Create trainer avatar
+            createTrainer();
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createTrainer() {
+            const trainerGroup = new THREE.Group();
+            
+            // Body
+            const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.3, 1, 8);
+            const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x667eea });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 1;
+            body.castShadow = true;
+            trainerGroup.add(body);
+            
+            // Head
+            const headGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+            const headMaterial = new THREE.MeshStandardMaterial({ color: 0xfbbf24 });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 1.75;
+            head.castShadow = true;
+            trainerGroup.add(head);
+            
+            // Arms
+            const armGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8);
+            const armMaterial = new THREE.MeshStandardMaterial({ color: 0x667eea });
+            
+            const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+            leftArm.position.set(-0.5, 1, 0);
+            leftArm.castShadow = true;
+            trainerGroup.add(leftArm);
+            
+            const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+            rightArm.position.set(0.5, 1, 0);
+            rightArm.castShadow = true;
+            trainerGroup.add(rightArm);
+            
+            // Legs
+            const legGeometry = new THREE.CylinderGeometry(0.12, 0.12, 0.9, 8);
+            const legMaterial = new THREE.MeshStandardMaterial({ color: 0x4a5568 });
+            
+            const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+            leftLeg.position.set(-0.2, 0.45, 0);
+            leftLeg.castShadow = true;
+            trainerGroup.add(leftLeg);
+            
+            const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+            rightLeg.position.set(0.2, 0.45, 0);
+            rightLeg.castShadow = true;
+            trainerGroup.add(rightLeg);
+            
+            trainer = trainerGroup;
+            trainer.userData = { body, head, leftArm, rightArm, leftLeg, rightLeg };
+            scene.add(trainer);
+        }
+        
+        function animateExercise(exercise) {
+            const time = Date.now() * 0.001;
+            const exerciseData = exercises[exercise];
+            
+            if (exercise === 'squat') {
+                const squat = Math.sin(time * 3) * 0.3;
+                trainer.position.y = Math.max(0, squat);
+                trainer.userData.leftLeg.scale.y = 1 - Math.abs(squat) * 0.5;
+                trainer.userData.rightLeg.scale.y = 1 - Math.abs(squat) * 0.5;
+                trainer.userData.leftArm.rotation.x = squat * 2;
+                trainer.userData.rightArm.rotation.x = squat * 2;
+            } else if (exercise === 'jumpingjack') {
+                const jump = Math.abs(Math.sin(time * 4)) * 0.8;
+                trainer.position.y = jump;
+                const armSpread = Math.sin(time * 4) * 1.2;
+                trainer.userData.leftArm.rotation.z = armSpread;
+                trainer.userData.rightArm.rotation.z = -armSpread;
+                const legSpread = Math.sin(time * 4) * 0.4;
+                trainer.userData.leftLeg.rotation.z = legSpread;
+                trainer.userData.rightLeg.rotation.z = -legSpread;
+            } else if (exercise === 'stretch') {
+                trainer.userData.leftArm.rotation.z = Math.sin(time * 2) * 0.8 + 0.8;
+                trainer.userData.rightArm.rotation.z = -Math.sin(time * 2) * 0.8 - 0.8;
+                trainer.rotation.y = Math.sin(time) * 0.3;
+                trainer.userData.body.scale.y = 1 + Math.sin(time * 2) * 0.1;
+            }
+            
+            // Change trainer color based on exercise
+            trainer.userData.body.material.color.setHex(exerciseData.color);
+        }
+        
+        function resetTrainerPose() {
+            trainer.position.set(0, 0, 0);
+            trainer.rotation.set(0, 0, 0);
+            trainer.userData.leftLeg.scale.y = 1;
+            trainer.userData.rightLeg.scale.y = 1;
+            trainer.userData.leftLeg.rotation.set(0, 0, 0);
+            trainer.userData.rightLeg.rotation.set(0, 0, 0);
+            trainer.userData.leftArm.rotation.set(0, 0, 0);
+            trainer.userData.rightArm.rotation.set(0, 0, 0);
+            trainer.userData.body.scale.y = 1;
+        }
+        
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            
+            if (currentExercise) {
+                animateExercise(currentExercise);
+                
+                // Update time
+                if (startTime) {
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    document.getElementById('time').textContent = elapsed;
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            const container = document.getElementById('scene-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        function updateStats() {
+            document.getElementById('reps').textContent = reps;
+            document.getElementById('calories').textContent = calories.toFixed(1);
+        }
+        
+        function startExercise(exercise) {
+            currentExercise = exercise;
+            startTime = Date.now();
+            reps = 0;
+            calories = 0;
+            updateStats();
+            
+            const exerciseData = exercises[exercise];
+            document.getElementById('status').innerHTML = `
+                <span class="emoji">💪</span> ${exerciseData.message}
+            `;
+            
+            // Simulate rep counting
+            const repInterval = setInterval(() => {
+                if (currentExercise === exercise) {
+                    reps++;
+                    calories += exerciseData.caloriesPerRep;
+                    updateStats();
+                    
+                    // Play encouragement sounds (simulated)
+                    if (reps % 5 === 0) {
+                        document.getElementById('status').innerHTML = `
+                            <span class="emoji">🔥</span> ${reps} reps! You're on fire!
+                        `;
+                    }
+                } else {
+                    clearInterval(repInterval);
+                }
+            }, exerciseData.duration);
+        }
+        
+        // Exercise button handlers
+        document.querySelectorAll('.exercise-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.exercise-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                const exercise = this.dataset.exercise;
+                resetTrainerPose();
+                startExercise(exercise);
+            });
+        });
+        
+        // Initialize the scene
+        init();
+    </script>
+</body>
+</html>
